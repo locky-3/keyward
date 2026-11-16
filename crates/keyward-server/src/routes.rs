@@ -29,8 +29,18 @@ const PULL_MAX: i64 = 1000;
 
 type St = State<Arc<AppState>>;
 
+/// Shown to anyone opening the server in a browser. Reveals no version or
+/// configuration details.
+const ROOT_TEXT: &str = "Keyward sync server
+
+This is an API for the `kw` command-line client; there is no web interface.
+Connect with:  kw sync register --server <this URL> --username <name>
+Health check:  /healthz
+";
+
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
+        .route("/", get(|| async { ROOT_TEXT }))
         .route("/healthz", get(|| async { "ok" }))
         .route("/api/v1/accounts/prelogin", post(prelogin))
         .route("/api/v1/accounts", post(register))

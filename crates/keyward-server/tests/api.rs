@@ -193,6 +193,9 @@ async fn health() {
         s.call(Method::GET, "/healthz", None, None).await.status,
         StatusCode::OK
     );
+    // The root explains what this is instead of a bare 404.
+    let root = s.call(Method::GET, "/", None, None).await;
+    assert_eq!(root.status, StatusCode::OK);
 }
 
 #[tokio::test]

@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+*.kwv
+*.kwv.bak.*
+*.kwv.lock
+!crates/keyward-core/tests/fixtures/*.kwv
+.DS_Store
+.idea/
+.vscode/

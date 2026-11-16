@@ -158,6 +158,18 @@ fn wrong_master_password_is_generic_and_leaks_nothing() {
 }
 
 #[test]
+fn empty_item_password_is_refused() {
+    let e = Env::new();
+    e.init();
+    e.run(&["add", "Empty"], &[MASTER, "", ""])
+        .failure()
+        .stderr(contains("password is empty"));
+    e.run(&["search", "empty"], &[MASTER])
+        .success()
+        .stdout(contains("(no items)"));
+}
+
+#[test]
 fn vault_file_holds_no_plaintext() {
     let e = Env::new();
     e.init().add("SuperSecretBank", "agent007", "TopSecretPw!");

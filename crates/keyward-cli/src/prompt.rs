@@ -49,6 +49,15 @@ impl Prompter {
         Ok(a)
     }
 
+    /// A password to store in an item: confirmed and not empty.
+    pub fn new_item_password(self, what: &str) -> Result<SecretString> {
+        let pw = self.new_secret(what)?;
+        if pw.expose_secret().is_empty() {
+            bail!("the password is empty; type one, or use --generate to create a strong one");
+        }
+        Ok(pw)
+    }
+
     /// A new master password: confirmed and at least [`MIN_MASTER_LEN`] chars.
     pub fn new_master_password(self) -> Result<SecretString> {
         let pw = self.new_secret("New master password")?;

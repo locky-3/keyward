@@ -74,7 +74,7 @@ fn add(a: AddArgs, s: &mut Session, p: Prompter) -> Result<()> {
         };
         generate_password(&opts)?.0
     } else {
-        p.new_secret(&format!("Password for {}", a.title))?
+        p.new_item_password(&format!("Password for {}", a.title))?
     };
     let mut login = Login::new(a.title, a.username.unwrap_or_default(), password);
     login.url = a.url.filter(|u| !u.is_empty());
@@ -140,7 +140,7 @@ fn edit(a: EditArgs, s: &mut Session, p: Prompter) -> Result<()> {
     // Collect every prompted/generated value first: the update closure
     // cannot fail or prompt.
     let new_password = if a.password {
-        Some(p.new_secret("New password")?)
+        Some(p.new_item_password("New password")?)
     } else if a.generate {
         let opts = CharsetOptions {
             length: a.length,

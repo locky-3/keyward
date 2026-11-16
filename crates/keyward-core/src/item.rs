@@ -49,6 +49,17 @@ impl fmt::Debug for ItemId {
     }
 }
 
+impl std::str::FromStr for ItemId {
+    type Err = crate::error::Error;
+
+    /// Parse the hyphenated or simple UUID form.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Uuid::parse_str(s)
+            .map(Self)
+            .map_err(|_| crate::error::Error::ItemNotFound)
+    }
+}
+
 impl fmt::Display for ItemId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
@@ -250,6 +261,14 @@ mod tests {
         l.tags = vec!["Work".into(), "dev".into()];
         l.notes = SecretString::from("recovery codes in safe".to_owned());
         l
+    }
+
+    #[test]
+    fn item_id_parses_display_form() {
+        let id = ItemId::random();
+        assert_eq!(id.to_string().parse::<ItemId>().unwrap(), id);
+        assert_eq!(id.to_hex().parse::<ItemId>().unwrap(), id);
+        assert!("not-a-uuid".parse::<ItemId>().is_err());
     }
 
     #[test]

@@ -5,6 +5,7 @@
 mod aead;
 mod encoding;
 pub mod error;
+pub mod generator;
 pub mod item;
 pub mod kdf;
 pub mod keys;

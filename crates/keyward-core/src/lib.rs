@@ -2,21 +2,27 @@
 //! generation and TOTP. This crate performs no I/O; callers hand it bytes.
 #![forbid(unsafe_code)]
 
-mod aead;
+pub mod aead;
 mod encoding;
 pub mod error;
 pub mod generator;
 pub mod item;
 pub mod kdf;
 pub mod keys;
+pub mod sync;
 pub mod totp;
 pub mod vault;
 
+pub use aead::Sealed;
 pub use error::{Error, Result};
 pub use generator::{CharsetOptions, EntropyBits, PassphraseOptions, Strength};
 pub use item::{Item, ItemId, ItemKind, Login, PasswordHistoryEntry};
 pub use kdf::{KdfParams, Salt, derive_master_key};
 pub use keys::{AuthKey, MasterKey, VaultKey, WrapKey};
 pub use secrecy::{ExposeSecret, SecretString};
+pub use sync::{LoginHash, MergeOutcome, SyncState};
 pub use totp::{Totp, TotpAlgorithm};
-pub use vault::{FORMAT_VERSION, Header, UnlockedVault, VaultFile, VaultId};
+pub use vault::{
+    EncryptedItem, FORMAT_VERSION, Header, KdfAlgorithm, KdfHeader, UnlockedVault, VaultFile,
+    VaultId,
+};

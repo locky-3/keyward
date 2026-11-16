@@ -44,6 +44,18 @@ pub enum Error {
     #[error("item not found")]
     ItemNotFound,
 
+    /// An item received from the sync server failed authentication.
+    #[error("an item from the sync server failed authentication")]
+    RemoteIntegrity,
+
+    /// The sync server offered an older version than one already seen.
+    #[error("the sync server sent an older item version than previously seen (possible rollback)")]
+    RemoteRollback,
+
+    /// The operation needs a vault that is connected to a sync server.
+    #[error("this vault is not connected to a sync server")]
+    SyncNotConfigured,
+
     /// An encryption or serialization step failed. Carries no detail on purpose.
     #[error("cryptographic operation failed")]
     Crypto,

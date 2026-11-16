@@ -30,6 +30,21 @@ pub struct Sealed {
 }
 
 impl Sealed {
+    /// Rebuild from stored parts (e.g. database columns on the sync server).
+    pub fn from_parts(nonce: [u8; NONCE_LEN], ct: Vec<u8>) -> Self {
+        Self { nonce, ct }
+    }
+
+    /// The 96-bit nonce.
+    pub fn nonce(&self) -> &[u8; NONCE_LEN] {
+        &self.nonce
+    }
+
+    /// Ciphertext followed by the 16-byte tag.
+    pub fn ciphertext(&self) -> &[u8] {
+        &self.ct
+    }
+
     /// Bytes covered by the index digest: `nonce ‖ ciphertext‖tag`.
     pub(crate) fn digest_input(&self) -> impl Iterator<Item = &[u8]> {
         [self.nonce.as_slice(), self.ct.as_slice()].into_iter()

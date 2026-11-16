@@ -15,7 +15,8 @@ use crate::encoding::to_json_zeroizing;
 use crate::error::{Error, Result};
 use crate::item::{Item, ItemId, ItemKind};
 use crate::kdf::{KdfParams, Salt, derive_master_key};
-use crate::keys::VaultKey;
+use crate::keys::{MasterKey, VaultKey};
+use crate::sync::{LoginHash, SyncState};
 
 /// File magic: ASCII `KWVT`.
 pub const MAGIC: [u8; 4] = *b"KWVT";
@@ -85,7 +86,7 @@ pub struct Header {
 }
 
 impl Header {
-    fn wrap_aad(&self) -> Vec<u8> {
+    pub(crate) fn wrap_aad(&self) -> Vec<u8> {
         aad::wrap(
             FORMAT_VERSION,
             &self.vault_id,
@@ -103,11 +104,12 @@ pub struct EncryptedItem {
     pub id: ItemId,
     /// Item version (plaintext, also bound into the AAD).
     pub version: u64,
-    blob: Sealed,
+    /// Nonce and ciphertext.
+    pub blob: Sealed,
 }
 
 impl EncryptedItem {
-    fn digest(&self) -> [u8; 32] {
+    pub(crate) fn digest(&self) -> [u8; 32] {
         let mut h = Sha256::new();
         for part in self.blob.digest_input() {
             h.update(part);
@@ -123,6 +125,10 @@ struct IndexPlain {
     vault_id: VaultId,
     revision: u64,
     entries: Vec<IndexEntry>,
+    /// Sync configuration and bookkeeping. Optional and additive: vaults
+    /// that never synced serialize exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sync: Option<SyncState>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -198,11 +204,25 @@ impl VaultFile {
     /// (except KDF parameters outside the accepted range, which are checked
     /// before any work and leak nothing about the password).
     pub fn unlock(&self, password: &SecretString) -> Result<UnlockedVault> {
+        self.unlock_with_login_hash(password).map(|(v, _)| v)
+    }
+
+    /// Like [`VaultFile::unlock`], but also returns the sync-server login
+    /// hash derived from the same master key (one Argon2id run, not two).
+    pub fn unlock_with_login_hash(
+        &self,
+        password: &SecretString,
+    ) -> Result<(UnlockedVault, LoginHash)> {
         let h = &self.header;
         h.kdf.params.validate()?;
         let master = derive_master_key(password, &h.kdf.salt, &h.kdf.params)?;
+        let login = LoginHash::from_auth_key(&master.auth_key());
+        Ok((self.open_with_master(&master)?, login))
+    }
+
+    fn open_with_master(&self, master: &MasterKey) -> Result<UnlockedVault> {
+        let h = &self.header;
         let wrap_key = master.wrap_key();
-        drop(master);
 
         let fail = |_| Error::UnlockFailed;
 
@@ -263,6 +283,7 @@ impl VaultFile {
             revision: self.revision,
             items,
             sealed,
+            sync: index.sync,
         })
     }
 }
@@ -270,14 +291,16 @@ impl VaultFile {
 /// A decrypted vault held in memory. Dropping it zeroizes the vault key and
 /// all item data.
 pub struct UnlockedVault {
-    header: Header,
-    wrapped_vault_key: Sealed,
-    vault_key: VaultKey,
-    revision: u64,
-    items: BTreeMap<ItemId, Item>,
+    pub(crate) header: Header,
+    pub(crate) wrapped_vault_key: Sealed,
+    pub(crate) vault_key: VaultKey,
+    pub(crate) revision: u64,
+    pub(crate) items: BTreeMap<ItemId, Item>,
     /// Ciphertext of items unchanged since the last unlock/seal, reused so
     /// that untouched items are not re-encrypted on every save.
-    sealed: BTreeMap<ItemId, EncryptedItem>,
+    pub(crate) sealed: BTreeMap<ItemId, EncryptedItem>,
+    /// Present once the vault is connected to a sync server.
+    pub(crate) sync: Option<SyncState>,
 }
 
 impl fmt::Debug for UnlockedVault {
@@ -302,7 +325,7 @@ impl UnlockedVault {
             },
         };
         let vault_key = VaultKey::generate();
-        let wrapped_vault_key = wrap_vault_key(password, &header, &vault_key)?;
+        let (wrapped_vault_key, _) = wrap_vault_key(password, &header, &vault_key)?;
         Ok(Self {
             header,
             wrapped_vault_key,
@@ -310,6 +333,7 @@ impl UnlockedVault {
             revision: 0,
             items: BTreeMap::new(),
             sealed: BTreeMap::new(),
+            sync: None,
         })
     }
 
@@ -322,18 +346,7 @@ impl UnlockedVault {
         for (id, item) in &self.items {
             let enc = match self.sealed.get(id) {
                 Some(e) if e.version == item.version => e.clone(),
-                _ => {
-                    let pt = to_json_zeroizing(item).map_err(|_| Error::Crypto)?;
-                    EncryptedItem {
-                        id: *id,
-                        version: item.version,
-                        blob: aead::seal(
-                            self.vault_key.bytes(),
-                            &pt,
-                            &aad::item(&vid, id, item.version),
-                        )?,
-                    }
-                }
+                _ => self.encrypt_item(item)?,
             };
             entries.push(IndexEntry {
                 id: *id,
@@ -346,6 +359,7 @@ impl UnlockedVault {
             vault_id: vid,
             revision,
             entries,
+            sync: self.sync.clone(),
         })
         .map_err(|_| Error::Crypto)?;
         let index = aead::seal(
@@ -367,13 +381,66 @@ impl UnlockedVault {
 
     /// Re-wrap the vault key under a new master password (and optionally
     /// new KDF parameters). Items are not re-encrypted.
-    pub fn change_master_password(&mut self, new: &SecretString, kdf: KdfParams) -> Result<()> {
+    ///
+    /// Returns the login hash for the sync server under the new password.
+    pub fn change_master_password(
+        &mut self,
+        new: &SecretString,
+        kdf: KdfParams,
+    ) -> Result<LoginHash> {
         let mut header = self.header;
         header.kdf.params = kdf;
         header.kdf.salt = Salt::random();
-        self.wrapped_vault_key = wrap_vault_key(new, &header, &self.vault_key)?;
+        let (wrapped, login) = wrap_vault_key(new, &header, &self.vault_key)?;
+        self.wrapped_vault_key = wrapped;
         self.header = header;
-        Ok(())
+        Ok(login)
+    }
+
+    pub(crate) fn encrypt_item(&self, item: &Item) -> Result<EncryptedItem> {
+        let pt = to_json_zeroizing(item).map_err(|_| Error::Crypto)?;
+        Ok(EncryptedItem {
+            id: item.id,
+            version: item.version,
+            blob: aead::seal(
+                self.vault_key.bytes(),
+                &pt,
+                &aad::item(&self.header.vault_id, &item.id, item.version),
+            )?,
+        })
+    }
+
+    /// Build an empty vault from a header and wrapped key fetched from a
+    /// sync server. Also returns the login hash for that server.
+    pub fn from_remote(
+        header: Header,
+        wrapped_vault_key: Sealed,
+        password: &SecretString,
+    ) -> Result<(Self, LoginHash)> {
+        header.kdf.params.validate()?;
+        let master = derive_master_key(password, &header.kdf.salt, &header.kdf.params)?;
+        let login = LoginHash::from_auth_key(&master.auth_key());
+        let wrap_key = master.wrap_key();
+        let vk = aead::open(wrap_key.bytes(), &wrapped_vault_key, &header.wrap_aad())
+            .map_err(|_| Error::UnlockFailed)?;
+        let vault_key = VaultKey::from_slice(&vk).ok_or(Error::UnlockFailed)?;
+        Ok((
+            Self {
+                header,
+                wrapped_vault_key,
+                vault_key,
+                revision: 0,
+                items: BTreeMap::new(),
+                sealed: BTreeMap::new(),
+                sync: None,
+            },
+            login,
+        ))
+    }
+
+    /// The vault key wrapped under the current master password.
+    pub fn wrapped_vault_key(&self) -> &Sealed {
+        &self.wrapped_vault_key
     }
 
     /// Public header.
@@ -432,9 +499,18 @@ impl UnlockedVault {
     }
 
     /// Delete an item.
+    ///
+    /// If the item was already on the sync server, a pending deletion is
+    /// recorded so the next sync sends a tombstone.
     pub fn remove(&mut self, id: ItemId) -> Result<()> {
+        self.items.remove(&id).ok_or(Error::ItemNotFound)?;
         self.sealed.remove(&id);
-        self.items.remove(&id).map(drop).ok_or(Error::ItemNotFound)
+        if let Some(sync) = &mut self.sync
+            && let Some(base) = sync.synced.remove(&id)
+        {
+            sync.pending_deletes.insert(id, base);
+        }
+        Ok(())
     }
 
     /// All items, sorted by title (case-insensitive), then id.
@@ -458,10 +534,15 @@ impl UnlockedVault {
     }
 }
 
-fn wrap_vault_key(password: &SecretString, header: &Header, vk: &VaultKey) -> Result<Sealed> {
+fn wrap_vault_key(
+    password: &SecretString,
+    header: &Header,
+    vk: &VaultKey,
+) -> Result<(Sealed, LoginHash)> {
     let master = derive_master_key(password, &header.kdf.salt, &header.kdf.params)?;
     let wrap_key = master.wrap_key();
-    aead::seal(wrap_key.bytes(), vk.bytes(), &header.wrap_aad())
+    let sealed = aead::seal(wrap_key.bytes(), vk.bytes(), &header.wrap_aad())?;
+    Ok((sealed, LoginHash::from_auth_key(&master.auth_key())))
 }
 
 #[cfg(test)]

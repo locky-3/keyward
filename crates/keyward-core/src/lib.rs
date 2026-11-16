@@ -9,11 +9,14 @@ pub mod generator;
 pub mod item;
 pub mod kdf;
 pub mod keys;
+pub mod totp;
 pub mod vault;
 
 pub use error::{Error, Result};
+pub use generator::{CharsetOptions, EntropyBits, PassphraseOptions, Strength};
 pub use item::{Item, ItemId, ItemKind, Login, PasswordHistoryEntry};
 pub use kdf::{KdfParams, Salt, derive_master_key};
 pub use keys::{AuthKey, MasterKey, VaultKey, WrapKey};
 pub use secrecy::{ExposeSecret, SecretString};
+pub use totp::{Totp, TotpAlgorithm};
 pub use vault::{FORMAT_VERSION, Header, UnlockedVault, VaultFile, VaultId};

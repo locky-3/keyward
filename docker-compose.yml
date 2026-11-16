@@ -1,8 +1,10 @@
 # Keyward sync server behind Caddy (automatic HTTPS via Let's Encrypt).
 #
-#   KW_DOMAIN=vault.example.com docker compose up -d --build
+# Production:   KW_DOMAIN=vault.example.com docker compose up -d --build
+#   (point the domain's DNS at this host first; ports 80 and 443 must be reachable)
 #
-# Point the domain's DNS at this host first; ports 80 and 443 must be reachable.
+# Local try-out: docker compose -f docker-compose.yml -f compose.local.yml up --build
+#   then: kw sync register --server http://127.0.0.1:8080 --username you
 # After creating your account(s), set KW_REGISTRATION=closed and restart.
 
 services:
@@ -28,7 +30,9 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      KW_DOMAIN: "${KW_DOMAIN:?set KW_DOMAIN to your server's domain name}"
+      # Your public domain in production. Defaults to `localhost`, for which
+      # Caddy issues a certificate from its own local CA (browsers/curl need -k).
+      KW_DOMAIN: "${KW_DOMAIN:-localhost}"
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

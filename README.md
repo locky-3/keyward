@@ -138,6 +138,7 @@ stdin instead of the terminal.
 
 ```console
 $ KW_DOMAIN=vault.example.com docker compose up -d --build   # server + Caddy (HTTPS)
+$ docker compose -f docker-compose.yml -f compose.local.yml up --build   # local try-out
 
 $ kw sync register --server https://vault.example.com --username alice
 Registered "alice" on https://vault.example.com.

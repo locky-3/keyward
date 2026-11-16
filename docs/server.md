@@ -22,6 +22,20 @@ KW_DOMAIN=vault.example.com docker compose up -d --build
 
 The proxy configuration is [`deploy/Caddyfile`](../deploy/Caddyfile).
 
+### Local try-out
+
+```sh
+docker compose -f docker-compose.yml -f compose.local.yml up --build
+kw sync register --server http://127.0.0.1:8080 --username you
+```
+
+Without `KW_DOMAIN`, Caddy serves `https://localhost` with a certificate from
+its own local CA. Use `curl -k https://localhost/healthz`; `kw` does not trust
+that CA. `compose.local.yml` therefore also publishes the server's plain-HTTP
+port on `127.0.0.1:8080` only, and `kw` accepts `http://` for loopback.
+Never use `compose.local.yml` in production. Remove everything, including the
+test database, with `docker compose down -v`.
+
 ### Bare binary
 
 ```sh

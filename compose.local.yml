@@ -1,0 +1,8 @@
+# Local testing only: additionally publish keyward-server's plain-HTTP port
+# on the loopback interface so `kw` can reach it without a trusted
+# certificate (kw allows http:// only for localhost/127.0.0.1).
+# Do NOT use this file in production.
+services:
+  keyward:
+    ports:
+      - "127.0.0.1:8080:8080"

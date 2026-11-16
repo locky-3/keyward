@@ -79,6 +79,41 @@ pub enum VaultCommand {
     Gen(GenArgs),
     /// Change the master password (re-wraps the vault key; items are not re-encrypted)
     ChangeMasterPassword(KdfArgs),
+    /// Synchronise with a Keyward server (default action: push and pull)
+    Sync(SyncArgs),
+}
+
+/// `kw sync`
+#[derive(Debug, Args)]
+pub struct SyncArgs {
+    #[command(subcommand)]
+    pub action: Option<SyncAction>,
+}
+
+/// Sync sub-commands.
+#[derive(Debug, Subcommand)]
+pub enum SyncAction {
+    /// Pull remote changes and push local ones (the default)
+    Run,
+    /// Create an account on a server and upload this vault to it
+    Register(ServerArgs),
+    /// Download a vault from a server into a new local file (`--vault`)
+    Clone(ServerArgs),
+    /// Show the server connection and pending changes
+    Status,
+    /// Forget the server connection (local items are kept)
+    Disconnect,
+}
+
+/// Server address and account.
+#[derive(Debug, Args, Clone)]
+pub struct ServerArgs {
+    /// Server base URL, e.g. https://vault.example.com (http only for localhost)
+    #[arg(long)]
+    pub server: String,
+    /// Account name on the server
+    #[arg(long, short)]
+    pub username: String,
 }
 
 /// Argon2id cost overrides.

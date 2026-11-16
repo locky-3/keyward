@@ -8,6 +8,8 @@ mod prompt;
 mod session;
 mod shell;
 mod storage;
+mod sync_client;
+mod sync_cmd;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -17,7 +19,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use keyward_core::KdfParams;
 
-use cli::{Cli, Command, VaultCommand};
+use cli::{Cli, Command, SyncAction, SyncArgs, VaultCommand};
 use prompt::Prompter;
 use session::Session;
 
@@ -40,6 +42,9 @@ fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::ClipboardDaemon { seconds } => clipboard::run_daemon(seconds),
         Command::Vault(VaultCommand::Gen(a)) => commands::gen_password(&a),
+        Command::Vault(VaultCommand::Sync(SyncArgs {
+            action: Some(SyncAction::Clone(args)),
+        })) => sync_cmd::clone(&args, &vault_path(cli.vault)?, prompter),
         Command::Init(kdf) => {
             let path = vault_path(cli.vault)?;
             let params = kdf.resolve(KdfParams::DEFAULT);

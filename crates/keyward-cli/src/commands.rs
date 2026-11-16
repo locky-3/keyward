@@ -11,10 +11,10 @@ use keyward_core::{
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use crate::cli::{AddArgs, EditArgs, Field, GenArgs, GetArgs, VaultCommand};
-use crate::clipboard;
+use crate::cli::{AddArgs, EditArgs, Field, GenArgs, GetArgs, SyncAction, VaultCommand};
 use crate::prompt::Prompter;
 use crate::session::Session;
+use crate::{clipboard, sync_cmd};
 
 /// Run a command against an unlocked vault.
 pub fn run(cmd: VaultCommand, s: &mut Session, p: Prompter) -> Result<()> {
@@ -37,14 +37,25 @@ pub fn run(cmd: VaultCommand, s: &mut Session, p: Prompter) -> Result<()> {
         VaultCommand::Edit(a) => edit(a, s, p),
         VaultCommand::Rm { query, yes } => rm(&query, yes, s, p),
         VaultCommand::Gen(a) => gen_password(&a),
+        VaultCommand::Sync(a) => sync_cmd::run(a.action.unwrap_or(SyncAction::Run), s),
         VaultCommand::ChangeMasterPassword(a) => {
             let current = s.vault.header().kdf.params;
             let kdf = a.resolve(current);
             kdf.validate()?;
             let new = p.new_master_password()?;
-            s.vault.change_master_password(&new, kdf)?;
-            s.save()?;
-            println!("Master password changed.");
+            let change = s.vault.prepare_password_change(&new, kdf)?;
+            if s.vault.sync_state().is_some() {
+                // Server first: if it refuses, the local vault is untouched.
+                sync_cmd::change_password_synced(s, change)?;
+                println!("Master password changed here and on the sync server.");
+                eprintln!(
+                    "note: other devices must run `kw sync clone` again with the new password."
+                );
+            } else {
+                s.commit_password_change(change);
+                s.save()?;
+                println!("Master password changed.");
+            }
             eprintln!(
                 "note: older backups ({}.bak.*) still open with the OLD password; \
                  delete them if that password may be compromised.",

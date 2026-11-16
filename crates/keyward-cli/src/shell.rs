@@ -16,7 +16,7 @@ use anyhow::Result;
 use clap::Parser;
 use zeroize::Zeroizing;
 
-use crate::cli::{ShellCommand, ShellLine, VaultCommand};
+use crate::cli::{ShellCommand, ShellLine, SyncAction, SyncArgs, VaultCommand};
 use crate::commands;
 use crate::prompt::{Prompter, read_stdin_line};
 use crate::session::Session;
@@ -129,6 +129,11 @@ fn repl(path: &Path, prompter: Prompter, shared: &Shared) -> Result<()> {
                 Ok(())
             }
             ShellCommand::Vault(VaultCommand::Gen(a)) => commands::gen_password(&a),
+            ShellCommand::Vault(VaultCommand::Sync(SyncArgs {
+                action: Some(SyncAction::Clone(_)),
+            })) => Err(anyhow::anyhow!(
+                "`kw sync clone` creates a new vault; run it outside the shell"
+            )),
             ShellCommand::Vault(cmd) => {
                 let mut guard = lock(&shared.session);
                 if guard.is_none() {

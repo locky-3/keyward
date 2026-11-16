@@ -4,7 +4,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use keyward_core::{KdfParams, SecretString, UnlockedVault};
+use keyward_core::{KdfParams, LoginHash, PasswordChange, SecretString, UnlockedVault};
 
 use crate::prompt::Prompter;
 use crate::storage;
@@ -15,6 +15,8 @@ pub struct Session {
     /// Revision on disk when we unlocked/last saved; used to detect
     /// concurrent modification by another process.
     base_revision: u64,
+    /// Sync-server credential derived at unlock time (zeroized on drop).
+    login: LoginHash,
     pub vault: UnlockedVault,
 }
 
@@ -39,16 +41,24 @@ impl Session {
     /// Read the vault file and unlock it with `password`.
     pub fn open_with(path: &Path, password: &SecretString) -> Result<Self> {
         let file = storage::read_vault(path)?;
-        let vault = file.unlock(password)?;
+        let (vault, login) = file.unlock_with_login_hash(password)?;
         Ok(Self {
             path: path.to_owned(),
             base_revision: file.revision(),
+            login,
             vault,
         })
     }
 
     /// Create and write a brand-new vault. Refuses to overwrite.
     pub fn create(path: &Path, password: &SecretString, kdf: KdfParams) -> Result<Self> {
+        let (vault, login) = UnlockedVault::create_with_login_hash(password, kdf)?;
+        Self::create_from(path, vault, login)
+    }
+
+    /// Write an already unlocked vault (e.g. cloned from a server) to a
+    /// new file. Refuses to overwrite.
+    pub fn create_from(path: &Path, mut vault: UnlockedVault, login: LoginHash) -> Result<Self> {
         if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             std::fs::create_dir_all(dir)
                 .with_context(|| format!("creating directory {}", dir.display()))?;
@@ -57,12 +67,12 @@ impl Session {
         if path.exists() {
             bail!("a vault already exists at {}", path.display());
         }
-        let mut vault = UnlockedVault::create(password, kdf)?;
         let file = vault.seal()?;
         storage::write_atomic(path, &file.to_bytes()?, storage::BACKUPS)?;
         Ok(Self {
             path: path.to_owned(),
             base_revision: file.revision(),
+            login,
             vault,
         })
     }
@@ -84,6 +94,17 @@ impl Session {
         storage::write_atomic(&self.path, &file.to_bytes()?, storage::BACKUPS)?;
         self.base_revision = file.revision();
         Ok(())
+    }
+
+    /// Apply a prepared password change and remember the new credential.
+    pub fn commit_password_change(&mut self, change: PasswordChange) {
+        self.login = change.login.clone();
+        self.vault.commit_password_change(change);
+    }
+
+    /// Credential for the sync server.
+    pub fn login_hash(&self) -> &LoginHash {
+        &self.login
     }
 
     /// Vault path.
@@ -142,5 +163,15 @@ mod tests {
         let pw = SecretString::from("master-pass".to_owned());
         Session::create(&path, &pw, fast()).unwrap();
         assert!(Session::create(&path, &pw, fast()).is_err());
+    }
+
+    #[test]
+    fn login_hash_is_the_same_after_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v.kwv");
+        let pw = SecretString::from("master-pass".to_owned());
+        let a = Session::create(&path, &pw, fast()).unwrap();
+        let b = Session::open_with(&path, &pw).unwrap();
+        assert_eq!(a.login_hash(), b.login_hash());
     }
 }

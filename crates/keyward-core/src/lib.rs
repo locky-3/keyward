@@ -23,6 +23,6 @@ pub use secrecy::{ExposeSecret, SecretString};
 pub use sync::{LoginHash, MergeOutcome, SyncState};
 pub use totp::{Totp, TotpAlgorithm};
 pub use vault::{
-    EncryptedItem, FORMAT_VERSION, Header, KdfAlgorithm, KdfHeader, UnlockedVault, VaultFile,
-    VaultId,
+    EncryptedItem, FORMAT_VERSION, Header, KdfAlgorithm, KdfHeader, PasswordChange, UnlockedVault,
+    VaultFile, VaultId,
 };

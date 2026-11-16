@@ -288,6 +288,15 @@ impl VaultFile {
     }
 }
 
+/// A prepared, not yet applied master-password change.
+#[derive(Debug, Clone)]
+pub struct PasswordChange {
+    /// New header and wrapped key, as the sync server should store them.
+    pub remote: crate::sync::api::RemoteVault,
+    /// Login hash under the new password.
+    pub login: LoginHash,
+}
+
 /// A decrypted vault held in memory. Dropping it zeroizes the vault key and
 /// all item data.
 pub struct UnlockedVault {
@@ -316,6 +325,14 @@ impl fmt::Debug for UnlockedVault {
 impl UnlockedVault {
     /// Create a new, empty vault protected by `password`.
     pub fn create(password: &SecretString, kdf: KdfParams) -> Result<Self> {
+        Self::create_with_login_hash(password, kdf).map(|(v, _)| v)
+    }
+
+    /// Like [`UnlockedVault::create`], also returning the sync login hash.
+    pub fn create_with_login_hash(
+        password: &SecretString,
+        kdf: KdfParams,
+    ) -> Result<(Self, LoginHash)> {
         let header = Header {
             vault_id: VaultId::random(),
             kdf: KdfHeader {
@@ -325,16 +342,19 @@ impl UnlockedVault {
             },
         };
         let vault_key = VaultKey::generate();
-        let (wrapped_vault_key, _) = wrap_vault_key(password, &header, &vault_key)?;
-        Ok(Self {
-            header,
-            wrapped_vault_key,
-            vault_key,
-            revision: 0,
-            items: BTreeMap::new(),
-            sealed: BTreeMap::new(),
-            sync: None,
-        })
+        let (wrapped_vault_key, login) = wrap_vault_key(password, &header, &vault_key)?;
+        Ok((
+            Self {
+                header,
+                wrapped_vault_key,
+                vault_key,
+                revision: 0,
+                items: BTreeMap::new(),
+                sealed: BTreeMap::new(),
+                sync: None,
+            },
+            login,
+        ))
     }
 
     /// Encrypt the vault for storage. Increments the revision.
@@ -388,13 +408,37 @@ impl UnlockedVault {
         new: &SecretString,
         kdf: KdfParams,
     ) -> Result<LoginHash> {
+        let change = self.prepare_password_change(new, kdf)?;
+        let login = change.login.clone();
+        self.commit_password_change(change);
+        Ok(login)
+    }
+
+    /// Compute a master-password change without applying it, so a sync
+    /// server can accept it first. Apply with
+    /// [`UnlockedVault::commit_password_change`].
+    pub fn prepare_password_change(
+        &self,
+        new: &SecretString,
+        kdf: KdfParams,
+    ) -> Result<PasswordChange> {
         let mut header = self.header;
         header.kdf.params = kdf;
         header.kdf.salt = Salt::random();
-        let (wrapped, login) = wrap_vault_key(new, &header, &self.vault_key)?;
-        self.wrapped_vault_key = wrapped;
-        self.header = header;
-        Ok(login)
+        let (wrapped_vault_key, login) = wrap_vault_key(new, &header, &self.vault_key)?;
+        Ok(PasswordChange {
+            remote: crate::sync::api::RemoteVault {
+                header,
+                wrapped_vault_key,
+            },
+            login,
+        })
+    }
+
+    /// Apply a change computed by [`UnlockedVault::prepare_password_change`].
+    pub fn commit_password_change(&mut self, change: PasswordChange) {
+        self.header = change.remote.header;
+        self.wrapped_vault_key = change.remote.wrapped_vault_key;
     }
 
     pub(crate) fn encrypt_item(&self, item: &Item) -> Result<EncryptedItem> {
@@ -745,6 +789,20 @@ mod tests {
         );
         let v2 = reparse(&after).unlock(&pw("new master")).unwrap();
         assert_eq!(password_of(&v2, a), "pa");
+    }
+
+    #[test]
+    fn prepared_password_change_applies_only_on_commit() {
+        let (mut v, [a, _], _) = sample();
+        let change = v
+            .prepare_password_change(&pw("next"), KdfParams::INSECURE_TEST)
+            .unwrap();
+        // not applied yet: old password still works after sealing
+        assert!(v.seal().unwrap().unlock(&pw("master")).is_ok());
+        v.commit_password_change(change);
+        let f = v.seal().unwrap();
+        assert_eq!(f.unlock(&pw("master")).unwrap_err(), Error::UnlockFailed);
+        assert_eq!(password_of(&f.unlock(&pw("next")).unwrap(), a), "pa");
     }
 
     #[test]

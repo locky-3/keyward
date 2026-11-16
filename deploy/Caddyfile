@@ -1,0 +1,22 @@
+# TLS-terminating reverse proxy for keyward-server.
+# Caddy obtains and renews certificates automatically.
+# Incoming X-Forwarded-For headers from clients are discarded by Caddy
+# (no trusted_proxies configured), so the last entry it sends is the real
+# client address, which keyward-server uses for rate limiting.
+
+{$KW_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	request_body {
+		max_size 4MB
+	}
+
+	reverse_proxy keyward:8080
+}

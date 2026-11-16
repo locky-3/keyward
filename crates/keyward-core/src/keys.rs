@@ -3,7 +3,7 @@
 //! ```text
 //! master password --Argon2id--> MasterKey
 //!     MasterKey --HKDF-SHA256("keyward/v1/wrap")--> WrapKey   (wraps the VaultKey)
-//!     MasterKey --HKDF-SHA256("keyward/v1/auth")--> AuthKey   (sync-server login, phase 2)
+//!     MasterKey --HKDF-SHA256("keyward/v1/auth")--> AuthKey   (sync-server login)
 //! VaultKey: 32 random bytes, encrypts items and the index.
 //! ```
 //!
@@ -40,7 +40,7 @@ macro_rules! redacted_debug {
 pub struct MasterKey(KeyBytes);
 /// Key-encryption key that wraps the [`VaultKey`].
 pub struct WrapKey(KeyBytes);
-/// Key from which the sync-server credential is derived (phase 2).
+/// Key from which the sync-server credential ([`crate::LoginHash`]) is derived.
 pub struct AuthKey(KeyBytes);
 /// Random data-encryption key for items and the index.
 pub struct VaultKey(KeyBytes);
@@ -88,7 +88,7 @@ impl WrapKey {
 }
 
 impl AuthKey {
-    /// Raw key bytes. The sync client hashes these before sending anything.
+    /// Raw key bytes. Hashed into a [`crate::LoginHash`] before leaving the client.
     pub fn expose_secret(&self) -> &[u8; KEY_LEN] {
         self.0.expose_secret()
     }

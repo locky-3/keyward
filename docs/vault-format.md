@@ -42,7 +42,7 @@ Binary values are standard base64 (padded). IDs are UUID strings.
 ```text
 MK  = Argon2id(password_utf8, salt, m, t, p, version 0x13, out = 32 bytes)
 WK  = HKDF-SHA256(ikm = MK, salt = none, info = "keyward/v1/wrap", L = 32)
-AK  = HKDF-SHA256(ikm = MK, salt = none, info = "keyward/v1/auth", L = 32)   (sync, phase 2)
+AK  = HKDF-SHA256(ikm = MK, salt = none, info = "keyward/v1/auth", L = 32)   → LoginHash for the sync server
 VK  = 32 random bytes from the OS CSPRNG, generated once per vault
 ```
 
@@ -93,6 +93,22 @@ its old, matching version number.
 ```
 
 `id` and `version` are checked against the outer (authenticated) values.
+
+### Optional sync state (in the index)
+
+A vault connected to a sync server has one extra, optional field in the
+**encrypted** index plaintext:
+
+```jsonc
+"sync": { "server": "https://vault.example.com", "username": "alice", "cursor": 42,
+          "synced": { "<item uuid>": 3 },            // last server version seen
+          "pending_deletes": { "<item uuid>": 2 } }   // tombstones still to send
+```
+
+The field is omitted when absent, so vaults that never synced are byte-for-byte
+in the original v1 layout, and the golden fixture keeps opening. A build that
+predates sync cannot open a synced vault: it rejects the unknown field and
+reports `UnlockFailed`.
 
 ## Unlock algorithm
 

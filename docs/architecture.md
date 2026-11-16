@@ -6,7 +6,7 @@
 |---|---|---|
 | `keyward-core` | KDF, key hierarchy, AEAD, item model, vault format, generator, TOTP | none: bytes in, bytes out |
 | `keyward-cli` (`kw`) | Commands, prompts, clipboard, atomic storage, interactive shell | filesystem, terminal, clipboard |
-| `keyward-server` | Phase 2: axum + SQLite sync server that stores only ciphertext | network, DB |
+| `keyward-server` | axum + SQLite sync server that stores only ciphertext ([docs/server.md](server.md)) | network, DB |
 | `keyward-tui` | Phase 3: ratatui client | terminal |
 
 `keyward-core` doing no I/O keeps it easy to test exhaustively (property tests
@@ -36,13 +36,36 @@ sequenceDiagram
     Note over D: sleep 20 s; clear if unchanged
 ```
 
+## Data flow: `kw sync`
+
+```mermaid
+sequenceDiagram
+    participant CLI as kw
+    participant C as keyward-core
+    participant S as keyward-server
+    CLI->>C: unlock_with_login_hash(pw) → vault + LoginHash
+    CLI->>S: POST /sessions {username, LoginHash}
+    S-->>CLI: bearer token
+    CLI->>S: GET /items?since=cursor
+    S-->>CLI: changes (blobs / tombstones)
+    CLI->>C: apply_remote(change) — verify AAD, reject rollback, merge
+    loop each pending item
+        CLI->>C: prepare_push(id) → {base_version, version, blob}
+        CLI->>S: PUT /items/{id}
+        S-->>CLI: 200 or 409 {current} → apply_remote, retry
+    end
+    CLI->>S: DELETE /items/{id} for pending tombstones
+    CLI->>CLI: save vault (sync state in encrypted index)
+    CLI->>S: DELETE /sessions/current
+```
+
 ## Key hierarchy
 
 ```mermaid
 flowchart LR
     P[master password] -->|Argon2id<br/>salt, m, t, p| MK[MasterKey]
     MK -->|HKDF info=keyward/v1/wrap| WK[WrapKey]
-    MK -->|HKDF info=keyward/v1/auth| AK[AuthKey<br/>phase 2]
+    MK -->|HKDF info=keyward/v1/auth| AK[AuthKey<br/>sync login]
     RNG[OsRng] --> VK[VaultKey]
     WK -->|AES-GCM, AAD=header| WVK[(wrapped VK)]
     VK -->|AES-GCM, AAD=vault,rev| IDX[(index)]
@@ -86,3 +109,6 @@ The known limits are listed in [SECURITY.md](../SECURITY.md).
 | Generator | Class coverage, exact entropy, χ² uniformity, EFF list integrity |
 | TOTP | RFC 6238 Appendix B (SHA1/256/512), RFC 4226 Appendix D |
 | CLI | Unit tests (storage, lock, conflict detection, idle timer) and end-to-end `assert_cmd` runs of every command, including the shell |
+| Sync logic | Scenario tests plus a proptest: two devices doing random offline add, edit and delete operations always converge with nothing pending. Tests for forged, relabelled, moved and rolled-back blobs. |
+| Server | API tests on in-memory SQLite: version conflicts, tombstones, pagination, account isolation, expiry, lockout (including unknown users), rate limit, password change revoking sessions, no plaintext in the DB |
+| End to end | `kw` binaries for two "devices" against a real server on a random port: register, clone, edit, delete, conflict, password change, shell |

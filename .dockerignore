@@ -1,0 +1,5 @@
+target
+.git
+**/*.kwv
+**/*.kwv.*
+data

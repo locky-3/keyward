@@ -1,6 +1,6 @@
 //! Thin wrapper over AES-256-GCM plus the associated-data (AAD) layouts.
 //!
-//! Every call to [`seal`] draws a fresh 96-bit nonce from the OS CSPRNG.
+//! Every call to `seal` draws a fresh 96-bit nonce from the OS CSPRNG.
 //! With random nonces the safe limit is about 2^32 encryptions per key;
 //! a vault re-encrypts only changed items, so it stays far below that.
 

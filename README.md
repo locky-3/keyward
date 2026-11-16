@@ -11,8 +11,11 @@ of features.
 - **No `unsafe`, no home-made crypto.** Only RustCrypto crates.
 - **`kw` CLI.** Clipboard auto-clear, password and passphrase generator,
   TOTP, and an interactive shell that auto-locks.
+- **Zero-knowledge sync server** (axum + SQLite). It stores only ciphertext.
+  Per-item versions are checked on the server and conflicts are resolved on
+  the client.
 
-> **Status:** Phase 1 (core + local CLI). Not audited. Read
+> **Status:** Phase 2 (core, local CLI, sync server). Not audited. Read
 > [SECURITY.md](SECURITY.md) before trusting it with anything.
 
 ## Architecture
@@ -38,11 +41,16 @@ flowchart TB
     sess --> vault
     cmd --> gen & totp
     store --> file[(vault.kwv<br/>ciphertext only)]
+    cmd --> sc[sync client<br/>HTTPS]
+    sc -->|login hash, blobs| srv
+    subgraph server[keyward-server · axum + SQLite]
+        srv[REST API<br/>rate limit · lockout · CAS versions] --> db[(accounts · sessions<br/>encrypted items)]
+    end
 ```
 
 ```text
 password ─Argon2id─▶ MasterKey ─HKDF("wrap")─▶ WrapKey ─AES-GCM─▶ wrapped VaultKey
-                               └HKDF("auth")─▶ AuthKey (sync server, phase 2)
+                               └HKDF("auth")─▶ AuthKey ─SHA-256─▶ LoginHash (sync server)
 VaultKey (random) ─AES-GCM─▶ index + every item
 ```
 
@@ -53,6 +61,8 @@ More detail:
   byte
 - [docs/threat-model.md](docs/threat-model.md): adversaries, design decisions
   and known gaps
+- [docs/server.md](docs/server.md): running the sync server, configuration,
+  protocol and API
 
 ## Install
 
@@ -124,6 +134,22 @@ Items can be named by exact title, a unique search hit, or an id prefix
 For scripts and tests, `--password-stdin` reads each password as one line from
 stdin instead of the terminal.
 
+### Sync
+
+```console
+$ KW_DOMAIN=vault.example.com docker compose up -d --build   # server + Caddy (HTTPS)
+
+$ kw sync register --server https://vault.example.com --username alice
+Registered "alice" on https://vault.example.com.
+Synced: received 0 change(s), removed 0, sent 2, deleted 0 on server, 0 conflict(s) resolved.
+
+$ kw --vault laptop.kwv sync clone --server https://vault.example.com --username alice
+$ kw sync            # pull + push; also available inside `kw shell`
+$ kw sync status
+```
+
+See [docs/server.md](docs/server.md) for configuration and the protocol.
+
 ## Development
 
 ```sh
@@ -136,10 +162,11 @@ The crates are laid out as follows:
 - `keyward-core`: crypto, vault format, item model, generator, TOTP. Unit
   tests, proptests and a golden fixture.
 - `keyward-cli`: the `kw` binary. Unit tests and end-to-end `assert_cmd`
-  tests.
+  tests, including two "devices" syncing through a real server.
+- `keyward-server`: the sync server. API tests against in-memory SQLite with
+  an injectable clock.
 
 Roadmap:
-- Phase 2: sync server (axum + SQLite, stores only ciphertext)
 - Phase 3: ratatui TUI
 
 ## License

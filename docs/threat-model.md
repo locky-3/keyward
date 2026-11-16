@@ -18,7 +18,7 @@
 ┌──────────────────────────┐      ┌───────────────────────────┐
 │ kw process (memory)      │ ───> │ vault.kwv, .bak.N files   │
 │  - master key, VK        │      │ disk, cloud backup, USB,  │
-│  - decrypted items       │ <─── │ sync server (phase 2)     │
+│  - decrypted items       │ <─── │ sync server               │
 └──────────────────────────┘      └───────────────────────────┘
           ▲  OS, terminal, clipboard: trusted, see "out of scope"
 ```
@@ -33,6 +33,10 @@
 | A4 | Another `kw` process | Edits the vault at the same time | The lock file plus a revision check reject the second write. No silent lost update. |
 | A5 | Shoulder surfer | Watches the screen | Passwords are not echoed. `list` and `details` never print secrets. Clipboard is the default. |
 | A6 | Local malware or root | Reads memory, keystrokes and clipboard | **Out of scope.** No software-only password manager defends against this. |
+| A7 | Honest-but-curious server operator, or a DB thief | Reads everything the server stores | Sees only metadata (see docs/server.md). The Argon2id(LoginHash) values are useless for login. Offline guessing costs a full Argon2id plus HKDF per guess, as for a stolen vault file. |
+| A8 | Malicious server | Returns forged, moved, relabelled or old blobs; withholds data | Forged, moved or relabelled blobs fail AEAD authentication with `(vault, item, version)`. Versions older than already seen are refused. **Withholding** (or never revealing an item) is not detected. |
+| A9 | Network attacker | Sits between client and server | HTTPS is required. `kw` refuses plain `http://` to anything but loopback. Even with TLS broken, the attacker learns only ciphertext and a login hash, never the master password. |
+| A10 | Online guesser | Tries passwords against `/sessions` | Per-IP token bucket and per-username lockout. Unknown usernames are locked, timed and salted exactly like real ones. |
 
 ## Design decisions
 
@@ -40,7 +44,7 @@
   instead of re-encrypting every item, and the same design will carry over to
   sync and shared vaults.
 - **HKDF domain separation.** The Argon2 output never encrypts anything
-  directly. A future server sees only material derived from
+  directly. The sync server sees only material derived from
   `"keyward/v1/auth"`, which reveals nothing about the wrapping key.
 - **Random nonces.** 96-bit random nonces are safe for about 2³² encryptions
   under one key. A vault re-encrypts only changed items, so it stays many
@@ -52,7 +56,11 @@
 
 ## Known gaps (tracked)
 
-- No vault-key rotation, so old backups still open with old passwords.
+- No vault-key rotation, so old backups and other devices' copies still
+  open with old passwords. After a password change, other devices must
+  `kw sync clone` again.
+- In-memory rate-limit and lockout state resets when the server restarts.
+- Sync conflicts are resolved last-write-wins on the client's clock.
 - No `mlock` or `VirtualLock` of secret pages.
 - Whole-file rollback cannot be detected offline.
 - Login items only. Notes, cards and identities come later.

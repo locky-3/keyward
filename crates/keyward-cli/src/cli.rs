@@ -1,4 +1,8 @@
 //! Command-line definitions (clap derive).
+//!
+//! Doc comments here double as `--help` text, so they are written for the
+//! terminal rather than for rustdoc.
+#![allow(rustdoc::invalid_html_tags, rustdoc::bare_urls)]
 
 use std::path::PathBuf;
 

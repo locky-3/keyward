@@ -25,6 +25,10 @@ The full model is in [docs/threat-model.md](docs/threat-model.md).
 | Secrets left behind in logs or debug output | No secret type implements a revealing `Debug`. Errors never contain secret values. |
 | Clipboard leftovers | Cleared after 20 s, but only if it still holds our value. On Windows, excluded from clipboard history and cloud sync. |
 | Unattended unlocked `kw shell` | Idle auto-lock drops (and zeroizes) all keys and decrypted data. |
+| A curious or compromised **sync server**, or a leak of its database | The server only ever sees ciphertext, the wrapped key, the KDF parameters, and an Argon2id hash of a login hash derived from a separate HKDF label. It cannot decrypt anything, and the database is useless for logging in. |
+| A **malicious server** altering items | Blobs are authenticated against `(vault, item, version)`. Moved, relabelled or forged blobs are rejected, and so is any version older than one already seen. |
+| Online password guessing against the server | Per-IP rate limit, plus a per-username lockout (5 failures → 15 min). Unknown usernames behave identically, and `prelogin` returns stable fake salts for them. |
+| Stolen session token | Tokens are random 256-bit values, stored server-side as SHA-256, and expire after 12 h. A password change revokes all sessions. |
 
 ### NOT protected against
 
@@ -43,7 +47,22 @@ The full model is in [docs/threat-model.md](docs/threat-model.md).
   - Zeroization is best effort. It is not a guarantee.
 - **Rolling back the whole file.** Replacing the vault with an older,
   self-consistent copy, such as one of the `.bak.N` files, cannot be detected
-  offline. The phase 2 sync server can detect this by tracking revisions.
+  offline.
+- **A malicious server's availability.** The server can withhold new items or
+  updates, refuse service, or delete everything. It cannot forge or decrypt
+  them. Keep local backups.
+- **A server that never shows you an item.** Rollback protection covers items
+  the client has already seen. A server can still hide an item that this
+  device has never received.
+- **Server-side metadata.** Usernames, item counts and sizes, and edit times
+  and frequency are visible to the server operator.
+- **Account enumeration via registration.** `register` must say "username
+  taken". Close registration (`KW_REGISTRATION=closed`) once your accounts
+  exist. Accounts whose KDF settings differ from the defaults can also be
+  told apart through `prelogin`.
+- **Last-write-wins conflicts.** When two devices edit the same item offline,
+  the older edit is discarded, apart from what password history already
+  holds.
 - **Weak master passwords.** Argon2id slows guessing down. It cannot rescue
   `password1`.
 - **Old backups after a password change.** `change-master-password` re-wraps

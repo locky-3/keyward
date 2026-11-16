@@ -1,0 +1,40 @@
+# Keyward sync server behind Caddy (automatic HTTPS via Let's Encrypt).
+#
+#   KW_DOMAIN=vault.example.com docker compose up -d --build
+#
+# Point the domain's DNS at this host first; ports 80 and 443 must be reachable.
+# After creating your account(s), set KW_REGISTRATION=closed and restart.
+
+services:
+  keyward:
+    build: .
+    image: keyward-server:latest
+    restart: unless-stopped
+    environment:
+      KW_TRUST_PROXY: "true"            # client IPs come from Caddy's X-Forwarded-For
+      KW_REGISTRATION: "${KW_REGISTRATION:-open}"
+      RUST_LOG: "keyward_server=info,tower_http=info"
+    volumes:
+      - keyward-data:/data
+    expose:
+      - "8080"                          # only reachable by Caddy, not published
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - keyward
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      KW_DOMAIN: "${KW_DOMAIN:?set KW_DOMAIN to your server's domain name}"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  keyward-data:
+  caddy-data:
+  caddy-config:

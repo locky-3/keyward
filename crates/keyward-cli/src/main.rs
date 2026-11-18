@@ -1,27 +1,16 @@
 //! `kw` — command-line client for Keyward.
 #![forbid(unsafe_code)]
 
-mod cli;
-mod clipboard;
-mod commands;
-mod prompt;
-mod session;
-mod shell;
-mod storage;
-mod sync_client;
-mod sync_cmd;
-
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
+use keyward_cli::cli::{Cli, Command, SyncAction, SyncArgs, VaultCommand};
+use keyward_cli::prompt::Prompter;
+use keyward_cli::session::Session;
+use keyward_cli::{clipboard, commands, shell, sync_cmd, vault_path};
 use keyward_core::KdfParams;
-
-use cli::{Cli, Command, SyncAction, SyncArgs, VaultCommand};
-use prompt::Prompter;
-use session::Session;
 
 fn main() -> ExitCode {
     match run(Cli::parse()) {
@@ -73,12 +62,4 @@ fn run(cli: Cli) -> Result<()> {
             shell::run(&path, prompter, Duration::from_secs(idle_timeout.max(1)))
         }
     }
-}
-
-fn vault_path(explicit: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(p) = explicit {
-        return Ok(p);
-    }
-    let dir = dirs::data_local_dir().context("no data directory; pass --vault or set KW_VAULT")?;
-    Ok(dir.join("keyward").join("vault.kwv"))
 }

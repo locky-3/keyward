@@ -11,11 +11,14 @@ of features.
 - **No `unsafe`, no home-made crypto.** Only RustCrypto crates.
 - **`kw` CLI.** Clipboard auto-clear, password and passphrase generator,
   TOTP, and an interactive shell that auto-locks.
+- **`kw-tui` terminal UI.** Three panes, fuzzy search, Ctrl+K command
+  palette, TOTP countdown, generator, add/edit forms and idle auto-lock, in
+  copper on graphite.
 - **Zero-knowledge sync server** (axum + SQLite). It stores only ciphertext.
   Per-item versions are checked on the server and conflicts are resolved on
   the client.
 
-> **Status:** Phase 2 (core, local CLI, sync server). Not audited. Read
+> **Status:** Phase 3 (core, CLI, sync server, TUI). Not audited. Read
 > [SECURITY.md](SECURITY.md) before trusting it with anything.
 
 ## Architecture
@@ -134,6 +137,35 @@ Items can be named by exact title, a unique search hit, or an id prefix
 For scripts and tests, `--password-stdin` reads each password as one line from
 stdin instead of the terminal.
 
+### Terminal UI
+
+```console
+$ cargo install --path crates/keyward-tui --locked   # or: cargo run -p keyward-tui
+$ kw-tui                       # same vault as kw (--vault / KW_VAULT)
+```
+
+```text
+╭ Categories ─────╮╭ Search ─────────────────────╮╭ Details ──────────────────────────╮
+│All items      3 ││/ git                        ││GitHub                             │
+│With TOTP      1 │╰─────────────────────────────╯│Username  octocat                  │
+│#work          1 │╭ Items 1/3 ──────────────────╮│Password  ••••••••••  (r · c copy) │
+│Untagged       1 ││▌GitHub  octocat  ⏱          ││TOTP      263 420                  │
+│                 ││                             ││          ████████░░░░░░░░░  17s   │
+╰─────────────────╯╰─────────────────────────────╯╰───────────────────────────────────╯
+ Ctrl+K commands · / search · c copy · r reveal · n new · ? help      local · locks in 4:58
+```
+
+| Key | Action |
+|---|---|
+| `Ctrl+K` | command palette (fuzzy) |
+| `/` | fuzzy search (Esc clears) |
+| `↑↓` `j k`, `Tab` `← →` | move, switch pane |
+| `c`/`Enter`, `u`, `t` | copy password / username / TOTP code (clipboard clears after 20 s) |
+| `r` | reveal password and notes (hides again after 15 s or when you move) |
+| `n`, `e`, `d` | new, edit, delete (Ctrl+G in the form opens the generator) |
+| `g`, `s` | generator, sync |
+| `Ctrl+L`, `q` | lock, quit |
+
 ### Sync
 
 ```console
@@ -164,11 +196,13 @@ The crates are laid out as follows:
   tests, proptests and a golden fixture.
 - `keyward-cli`: the `kw` binary. Unit tests and end-to-end `assert_cmd`
   tests, including two "devices" syncing through a real server.
+- `keyward-tui`: the `kw-tui` binary. The state machine and rendering are
+  tested headlessly with ratatui's `TestBackend`.
 - `keyward-server`: the sync server. API tests against in-memory SQLite with
   an injectable clock.
 
-Roadmap:
-- Phase 3: ratatui TUI
+Ideas beyond the roadmap are listed in the project spec (browser extension,
+web UI, breach check, imports, shared vaults, hardware keys).
 
 ## License
 

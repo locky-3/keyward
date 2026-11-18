@@ -1,0 +1,27 @@
+[package]
+name = "keyward-tui"
+description = "kw-tui: terminal user interface for the Keyward password manager"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "kw-tui"
+path = "src/main.rs"
+
+[dependencies]
+keyward-core.workspace = true
+keyward-cli.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+ratatui.workspace = true
+secrecy.workspace = true
+zeroize.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -24,7 +24,7 @@ The full model is in [docs/threat-model.md](docs/threat-model.md).
 | Two `kw` processes overwriting each other's changes | Lock file, plus a revision check before every write. |
 | Secrets left behind in logs or debug output | No secret type implements a revealing `Debug`. Errors never contain secret values. |
 | Clipboard leftovers | Cleared after 20 s, but only if it still holds our value. On Windows, excluded from clipboard history and cloud sync. |
-| Unattended unlocked `kw shell` | Idle auto-lock drops (and zeroizes) all keys and decrypted data. |
+| Unattended unlocked `kw shell` / `kw-tui` | Idle auto-lock drops (and zeroizes) all keys and decrypted data. In the TUI, revealed passwords hide again after 15 s, and the locked screen shows no item data. |
 | A curious or compromised **sync server**, or a leak of its database | The server only ever sees ciphertext, the wrapped key, the KDF parameters, and an Argon2id hash of a login hash derived from a separate HKDF label. It cannot decrypt anything, and the database is useless for logging in. |
 | A **malicious server** altering items | Blobs are authenticated against `(vault, item, version)`. Moved, relabelled or forged blobs are rejected, and so is any version older than one already seen. |
 | Online password guessing against the server | Per-IP rate limit, plus a per-username lockout (5 failures → 15 min). Unknown usernames behave identically, and `prelogin` returns stable fake salts for them. |

@@ -7,7 +7,7 @@
 | `keyward-core` | KDF, key hierarchy, AEAD, item model, vault format, generator, TOTP | none: bytes in, bytes out |
 | `keyward-cli` (`kw`) | Commands, prompts, clipboard, atomic storage, interactive shell | filesystem, terminal, clipboard |
 | `keyward-server` | axum + SQLite sync server that stores only ciphertext ([docs/server.md](server.md)) | network, DB |
-| `keyward-tui` | Phase 3: ratatui client | terminal |
+| `keyward-tui` (`kw-tui`) | ratatui client. `App` is a pure state machine (keys in, actions out) and `ui::draw` is a pure render, both tested without a terminal | terminal, clipboard |
 
 `keyward-core` doing no I/O keeps it easy to test exhaustively (property tests
 and known-answer tests) and lets the CLI, TUI and server share it unchanged.
@@ -111,4 +111,5 @@ The known limits are listed in [SECURITY.md](../SECURITY.md).
 | CLI | Unit tests (storage, lock, conflict detection, idle timer) and end-to-end `assert_cmd` runs of every command, including the shell |
 | Sync logic | Scenario tests plus a proptest: two devices doing random offline add, edit and delete operations always converge with nothing pending. Tests for forged, relabelled, moved and rolled-back blobs. |
 | Server | API tests on in-memory SQLite: version conflicts, tombstones, pagination, account isolation, expiry, lockout (including unknown users), rate limit, password change revoking sessions, no plaintext in the DB |
+| TUI | `App` key handling (unlock, search, categories, copy actions, reveal timeout, auto-lock, palette, forms, generator, delete), rendering via `TestBackend` (secrets masked until revealed, locked screen shows no item data, tiny terminals don't panic), fuzzy ranking |
 | End to end | `kw` binaries for two "devices" against a real server on a random port: register, clone, edit, delete, conflict, password change, shell |

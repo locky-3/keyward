@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/keyward-core", "crates/keyward-cli", "crates/keyward-server"]
+members = [
+    "crates/keyward-core",
+    "crates/keyward-cli",
+    "crates/keyward-server",
+    "crates/keyward-tui",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -10,6 +15,7 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 keyward-core = { path = "crates/keyward-core" }
+keyward-cli = { path = "crates/keyward-cli" }
 
 # Crypto: audited RustCrypto crates only (digest 0.10 generation).
 aes-gcm = { version = "0.10.3", features = ["zeroize"] }
@@ -49,6 +55,9 @@ tower-http = { version = "0.6", features = ["trace", "limit"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+
+# TUI
+ratatui = "0.30"
 
 # Dev
 http-body-util = "0.1"

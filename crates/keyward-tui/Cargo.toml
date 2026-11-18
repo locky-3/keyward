@@ -1,13 +1,13 @@
 [package]
 name = "keyward-tui"
-description = "kw-tui: terminal user interface for the Keyward password manager"
+description = "keyward: terminal UI and command line for the Keyward password manager"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "kw-tui"
+name = "keyward"
 path = "src/main.rs"
 
 [dependencies]
@@ -22,6 +22,8 @@ time.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+assert_cmd.workspace = true
+predicates.workspace = true
 
 [lints]
 workspace = true

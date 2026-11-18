@@ -1,4 +1,10 @@
-//! `kw-tui` — terminal user interface for Keyward.
+//! `keyward` — opens the terminal UI, or runs a `kw` command when given one:
+//!
+//! ```text
+//! keyward                 # TUI
+//! keyward add GitHub -u me
+//! keyward list            # …every `kw` command works the same way
+//! ```
 #![forbid(unsafe_code)]
 
 use std::path::PathBuf;
@@ -7,39 +13,46 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, bail};
 use clap::Parser;
+use keyward_cli::cli::{Cli, Command};
 use keyward_cli::{clipboard, vault_path};
 use keyward_tui::app::{Action, App, CLIPBOARD_SECS};
 use keyward_tui::ui;
 use ratatui::DefaultTerminal;
 use ratatui::crossterm::event::{self, Event, KeyEventKind};
 
-/// Keyward terminal UI.
+/// Keyward password manager. Without a command, opens the terminal UI.
 #[derive(Debug, Parser)]
-#[command(name = "kw-tui", version, about)]
+#[command(name = "keyward", version, about, propagate_version = true)]
 struct Args {
     /// Vault file [default: <data dir>/keyward/vault.kwv]
-    #[arg(long, env = "KW_VAULT", value_name = "PATH")]
+    #[arg(long, global = true, env = "KW_VAULT", value_name = "PATH")]
     vault: Option<PathBuf>,
-    /// Lock after this many seconds without a key press
+
+    /// Read passwords from stdin, one per line (commands only; for scripts)
+    #[arg(long, global = true)]
+    password_stdin: bool,
+
+    /// TUI: lock after this many seconds without a key press
     #[arg(long, default_value_t = 300, value_name = "SECONDS")]
     idle_timeout: u64,
+
+    #[command(subcommand)]
+    command: Option<Command>,
 }
 
 fn main() -> ExitCode {
-    // The clipboard helper re-executes the current binary with this
-    // hidden argument (see keyward_cli::clipboard).
-    let raw: Vec<String> = std::env::args().collect();
-    if raw.get(1).map(String::as_str) == Some("__clipboard-daemon") {
-        let secs = raw
-            .get(3)
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(CLIPBOARD_SECS);
-        return match clipboard::run_daemon(secs) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::FAILURE,
-        };
-    }
-    match run(Args::parse()) {
+    let args = Args::parse();
+    let result = match args.command {
+        // Same commands as `kw` (including the hidden clipboard helper,
+        // which the clipboard code starts by re-running this binary).
+        Some(command) => keyward_cli::run(Cli {
+            vault: args.vault,
+            password_stdin: args.password_stdin,
+            command,
+        }),
+        None => run_tui(args.vault, args.idle_timeout),
+    };
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {e:#}");
@@ -48,17 +61,17 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(args: Args) -> Result<()> {
-    let path = vault_path(args.vault)?;
+fn run_tui(vault: Option<PathBuf>, idle_timeout: u64) -> Result<()> {
+    let path = vault_path(vault)?;
     if !path.exists() {
         bail!(
-            "no vault at {} (create one with `kw init`, or `kw sync clone`)",
+            "no vault at {} (create one with `keyward init`, or `keyward sync clone`)",
             path.display()
         );
     }
     let app = App::new(
         path,
-        Duration::from_secs(args.idle_timeout.max(10)),
+        Duration::from_secs(idle_timeout.max(10)),
         Instant::now(),
     );
     // Raw mode + alternate screen; restored on exit and on panic.

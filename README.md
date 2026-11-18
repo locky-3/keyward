@@ -11,7 +11,7 @@ of features.
 - **No `unsafe`, no home-made crypto.** Only RustCrypto crates.
 - **`kw` CLI.** Clipboard auto-clear, password and passphrase generator,
   TOTP, and an interactive shell that auto-locks.
-- **`kw-tui` terminal UI.** Three panes, fuzzy search, Ctrl+K command
+- **`keyward` terminal UI.** Three panes, fuzzy search, Ctrl+K command
   palette, TOTP countdown, generator, add/edit forms and idle auto-lock, in
   copper on graphite.
 - **Zero-knowledge sync server** (axum + SQLite). It stores only ciphertext.
@@ -70,7 +70,8 @@ More detail:
 ## Install
 
 ```sh
-cargo install --path crates/keyward-cli     # installs the `kw` binary
+cargo install --path crates/keyward-tui --locked   # `keyward`: TUI + all commands
+cargo install --path crates/keyward-cli --locked   # `kw`: short alias for the commands
 ```
 
 The default vault is `<local data dir>/keyward/vault.kwv`:
@@ -140,8 +141,9 @@ stdin instead of the terminal.
 ### Terminal UI
 
 ```console
-$ cargo install --path crates/keyward-tui --locked   # or: cargo run -p keyward-tui
-$ kw-tui                       # same vault as kw (--vault / KW_VAULT)
+$ cargo install --path crates/keyward-tui --locked   # installs `keyward`
+$ keyward                      # opens the TUI (same vault as kw: --vault / KW_VAULT)
+$ keyward add GitHub -u me     # with a command it works exactly like kw
 ```
 
 ```text
@@ -196,7 +198,7 @@ The crates are laid out as follows:
   tests, proptests and a golden fixture.
 - `keyward-cli`: the `kw` binary. Unit tests and end-to-end `assert_cmd`
   tests, including two "devices" syncing through a real server.
-- `keyward-tui`: the `kw-tui` binary. The state machine and rendering are
+- `keyward-tui`: the `keyward` binary. The state machine and rendering are
   tested headlessly with ratatui's `TestBackend`.
 - `keyward-server`: the sync server. API tests against in-memory SQLite with
   an injectable clock.

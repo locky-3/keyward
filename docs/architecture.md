@@ -7,7 +7,7 @@
 | `keyward-core` | KDF, key hierarchy, AEAD, item model, vault format, generator, TOTP | none: bytes in, bytes out |
 | `keyward-cli` (`kw`) | Commands, prompts, clipboard, atomic storage, interactive shell | filesystem, terminal, clipboard |
 | `keyward-server` | axum + SQLite sync server that stores only ciphertext ([docs/server.md](server.md)) | network, DB |
-| `keyward-tui` (`kw-tui`) | ratatui client. `App` is a pure state machine (keys in, actions out) and `ui::draw` is a pure render, both tested without a terminal | terminal, clipboard |
+| `keyward-tui` (`keyward`) | ratatui client. `App` is a pure state machine (keys in, actions out) and `ui::draw` is a pure render, both tested without a terminal | terminal, clipboard |
 
 `keyward-core` doing no I/O keeps it easy to test exhaustively (property tests
 and known-answer tests) and lets the CLI, TUI and server share it unchanged.

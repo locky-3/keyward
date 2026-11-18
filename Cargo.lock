@@ -1647,9 +1647,11 @@ name = "keyward-tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
  "clap",
  "keyward-cli",
  "keyward-core",
+ "predicates",
  "ratatui",
  "secrecy",
  "tempfile",
